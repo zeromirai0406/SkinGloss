@@ -1,9 +1,10 @@
-import cv2
+import cv2 
 import dlib
 import numpy as np
 import uuid
 import datetime
 import os
+import gdown
 from config.firebase_config import db  
 
 
@@ -46,16 +47,29 @@ class SkinAnalysisResult:
             "Recommendations": self.recommendations,
             "UserFeedback": self.user_feedback,
             "Notes": self.notes,
-            "Landmarks": self.landmarks  # Already converted to dicts in analyze_image
+            "Landmarks": self.landmarks
         }
 
 
 class SkinAnalyzer:
-    def __init__(self): 
+    def __init__(self):
+
+        # --- Google Drive Model Download ---
+        drive_id = "1-HTqUcR9a76I5zrJk95ZrXD6dzH-jowL"
         current_dir = os.path.dirname(os.path.abspath(__file__))
-        predictor_path = os.path.join(current_dir, "shape_predictor_68_face_landmarks.dat")
+        self.model_path = os.path.join(current_dir, "shape_predictor_68_face_landmarks.dat")
+        url = f"https://drive.google.com/uc?id={drive_id}"
+
+        # If model not exists → download
+        if not os.path.exists(self.model_path):
+            print("Downloading face landmark model from Google Drive...")
+            gdown.download(url, self.model_path, quiet=False)
+            print("Download complete!")
+
+        # Load detector + predictor
         self.detector = dlib.get_frontal_face_detector()
-        self.predictor = dlib.shape_predictor(predictor_path)
+        self.predictor = dlib.shape_predictor(self.model_path)
+
 
     def _adjust_lighting(self, roi):
         ycrcb = cv2.cvtColor(roi, cv2.COLOR_BGR2YCrCb)
@@ -116,9 +130,7 @@ class SkinAnalyzer:
         result.face_detected = True
 
         landmarks = self.predictor(gray, face)
-        points = [(landmarks.part(i).x, landmarks.part(i).y) for i in range(0, 68)]
-
-        # Convert tuples to dicts to prevent nested arrays in Firestore
+        points = [(landmarks.part(i).x, landmarks.part(i).y) for i in range(68)]
         result.landmarks = [{"x": x, "y": y} for x, y in points]
 
         mask = np.zeros_like(image)
@@ -152,6 +164,3 @@ class SkinAnalyzer:
         result.notes = f"Tone: {tone}, Condition: {condition}, Confidence: {confidence}"
 
         return result
-
-
-
